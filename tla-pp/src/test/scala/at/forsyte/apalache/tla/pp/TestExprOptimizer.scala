@@ -1,6 +1,6 @@
 package at.forsyte.apalache.tla.pp
 
-import at.forsyte.apalache.tla.lir.{BoolT1, FunT1, IntT1, OperT1, RecT1, SetT1, StrT1}
+import at.forsyte.apalache.tla.lir.{BoolT1, FunT1, IntT1, OperT1, RecT1, SetT1, StrT1, TupT1}
 import at.forsyte.apalache.tla.lir.convenience.tla._
 import at.forsyte.apalache.tla.lir.transformations.impl.TrackerWithListeners
 import at.forsyte.apalache.tla.lir.TypedPredefs._
@@ -102,6 +102,27 @@ class TestExprOptimizer extends AnyFunSuite with BeforeAndAfterEach {
     val memA = in(appFun(r, str("a")).as(intT), S).as(boolT)
     val memB = in(appFun(r, str("b")).as(intT), T).as(boolT)
     val expected = and(domEq, memA, memB).as(boolT)
+    val output = optimizer.apply(input)
+    assert(expected == output)
+  }
+
+  // an optimization for tuple membership over set cross product
+  test("""tup \in S1 \X S2 \X S3 becomes DOMAIN tups = { 1, 2, 3 } /\ tups.1 \in S1 /\ tups.2 \in S2 /\ tups.3 \in S3""") {
+  // test("""tup \in {a, b} \X {c, d} \X {e, f} becomes DOMAIN tups = { 1, 2, 3 } /\ tups.1 \in {a, b} /\ tups.2 \in {c, d} /\ tups.3 \in {e, f}""") {
+    val strSetT = SetT1(StrT1)
+    val setS1 = name("S1").as(strSetT)  // enumSet(str("a"), str("b")).as(strSetT)
+    val setS2 = name("S2").as(strSetT)  // enumSet(str("c"), str("d")).as(strSetT)
+    val setS3 = name("S3").as(strSetT)  // enumSet(str("e"), str("f")).as(strSetT)
+    val setprod = times(setS1, setS2, setS3)
+    val tupT = TupT1(StrT1, StrT1, StrT1)
+    val tup = name("tup").as(tupT)
+    val input = in(tup, setprod).as(boolT)
+
+    val domEq = eql(dom(tup).as(intSetT), enumSet(int(1), int(2), int(3)).as(intSetT)).as(boolT)
+    val mem1 = in(appFun(tup, int(1)).as(StrT1), setS1).as(boolT)
+    val mem2 = in(appFun(tup, int(2)).as(StrT1), setS2).as(boolT)
+    val mem3 = in(appFun(tup, int(3)).as(StrT1), setS3).as(boolT)
+    val expected = and(domEq, mem1, mem2, mem3).as(boolT)
     val output = optimizer.apply(input)
     assert(expected == output)
   }

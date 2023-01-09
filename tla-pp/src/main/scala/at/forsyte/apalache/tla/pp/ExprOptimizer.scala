@@ -98,6 +98,19 @@ class ExprOptimizer(nameGen: UniqueNameGenerator, tracker: TransformationTracker
         }
         apply(tla.and(domEq +: fieldsEq: _*).as(b))
       }
+
+    case OperEx(TlaSetOper.in, tup, OperEx(TlaSetOper.times, sets @ _*)) =>
+      // Transform tup \in S1 \X S2 \X ... \X Sk
+      // into
+      // DOMAIN tup = { 1, ..., k }  /\ tup.1 \in S1 /\ ... /\ tup.k \in Sk
+      // https://apalache.informal.systems/docs/lang/tuples.html
+      
+      val intSetT = SetT1(IntT1)
+      val b = BoolT1
+      val domEq = tla.eql(tla.dom(tup).as(intSetT), sets.length).as(b)  // XXX
+      val elemsEq = // OperEx(TlaSetOper.map, tla.dom(tup).as(intSetT),
+         sets.zip(tla.dom(tup).as(intSetT)).map { case (set, idx) => tla.in(tla.appFun(tup, idx), set).as(b) }
+      apply(tla.and(domEq +: elemsEq: _*).as(b))
   }
 
   /**

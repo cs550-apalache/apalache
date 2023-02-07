@@ -1,8 +1,9 @@
 package at.forsyte.apalache.tla.bmcmt.arena
 
 import at.forsyte.apalache.tla.bmcmt.ArenaCell
+import at.forsyte.apalache.tla.lir.{BoolT1, UID}
+import at.forsyte.apalache.tla.typecomp.TBuilderInstruction
 import at.forsyte.apalache.tla.types.tla
-import at.forsyte.apalache.tla.lir.{BoolT1, TlaEx, UID}
 
 /**
  * An abstract membership pointer.
@@ -19,22 +20,24 @@ sealed trait ElemPtr {
   /**
    * Translate the membership test into an expression that can be understood by Z3SolverContext.
    */
-  def toSmt: TlaEx
+  def toSmt: TBuilderInstruction
+
+  /**
+   * After certain set operations, every pointer must become a SmtExprElemPtr, because the operation invalidates the
+   * guarantees of e.g. FixedElemPtr.
+   */
+  def generalize: SmtExprElemPtr = SmtExprElemPtr(elem, toSmt)
 }
 
 /**
- * An element pointer that always evaluates to a fixed Boolean value. This pointer is used to encode that the element
- * unconditionally belongs to a set. For example, when constructing the set `{ 1, 2, 3 }`.
+ * An element pointer that always evaluates to true. This pointer is used to encode that the element unconditionally
+ * belongs to a set. For example, when constructing the set `{ 1, 2, 3 }`.
  *
  * @param elem
  *   the element this pointer is pointing to.
- * @param value
- *   the value (false or true).
  */
-case class FixedElemPtr(elem: ArenaCell, value: Boolean) extends ElemPtr {
-  override def toSmt: TlaEx = {
-    tla.bool(value)
-  }
+case class FixedElemPtr(elem: ArenaCell) extends ElemPtr {
+  override def toSmt: TBuilderInstruction = tla.bool(true)
 }
 
 /**
@@ -57,9 +60,8 @@ case class SmtConstElemPtr(elem: ArenaCell) extends ElemPtr {
    */
   val uniqueName = s"_bool_elem$id"
 
-  override def toSmt: TlaEx = {
-    tla.name(uniqueName, BoolT1)
-  }
+  override def toSmt: TBuilderInstruction = tla.name(uniqueName, BoolT1)
+
 }
 
 /**
@@ -71,6 +73,7 @@ case class SmtConstElemPtr(elem: ArenaCell) extends ElemPtr {
  * @param smtEx
  *   the corresponding SMT expression.
  */
-case class SmtExprElemPtr(elem: ArenaCell, smtEx: TlaEx) extends ElemPtr {
-  override def toSmt: TlaEx = smtEx
+case class SmtExprElemPtr(elem: ArenaCell, smtEx: TBuilderInstruction) extends ElemPtr {
+  override def toSmt: TBuilderInstruction = smtEx
+  def restrict(cond: TBuilderInstruction): SmtExprElemPtr = this.copy(smtEx = tla.and(smtEx, cond))
 }
